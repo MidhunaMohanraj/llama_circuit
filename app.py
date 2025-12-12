@@ -23,9 +23,39 @@ and once you're happy, you can download the final BOM file.
 # -------------------------
 # 🔹 INPUTS
 # -------------------------
+# -------------------------
+# 🔹 INPUTS
+# -------------------------
 uploaded_file = st.file_uploader("📄 Upload BOM Excel/CSV (optional)", type=["xlsx", "csv"])
 user_input = st.text_area("🧠 Describe your circuit requirements:")
-lcsc_link = st.text_input("🔗 Optional: Paste LCSC link for any component")
+
+# -------------------------
+# 🔗 MULTIPLE LCSC LINKS
+# -------------------------
+st.markdown("### 🔗 LCSC Component Links (Optional)")
+
+# Initialize list in session state
+if "lcsc_links" not in st.session_state:
+    st.session_state.lcsc_links = [""]
+
+# Render text inputs
+for i, link in enumerate(st.session_state.lcsc_links):
+    st.session_state.lcsc_links[i] = st.text_input(
+        f"LCSC Link {i+1}",
+        value=link,
+        key=f"lcsc_link_{i}"
+    )
+
+# Add button
+if st.button("➕ Add LCSC Link"):
+    st.session_state.lcsc_links.append("")
+
+# Show valid links
+valid_links = [l for l in st.session_state.lcsc_links if l.strip()]
+if valid_links:
+    st.markdown("#### 📄 Current LCSC Links")
+    st.json(valid_links)
+
 
 # Load BOM if provided
 if uploaded_file:
@@ -90,41 +120,37 @@ if st.button("➕ Add Component"):
 # ⚡ SCHEMATIC GENERATION (Block Diagram)
 # -------------------------
 def generate_block_diagram(components):
-    """Generate schematic SVG with colored components and white background."""
+    """Generate a visible block diagram with properly spaced boxes."""
+    import schemdraw
+    import schemdraw.flow as flow
+
     d = schemdraw.Drawing(show=False)
-    d.config(unit=2.5)
-    color_map = {
-        "resistor": "red",
-        "capacitor": "blue",
-        "led": "green",
-        "battery": "orange",
-        "default": "gray"
-    }
+    d.config(unit=3)
 
-    for comp in components:
-        label = f"{comp['type']} {comp['value']}"
-        ctype = comp["type"].lower()
-        color = color_map.get(ctype, color_map["default"])
-        if "resistor" in ctype:
-            d += elm.Resistor(color=color).label(label, loc="bottom")
-        elif "capacitor" in ctype:
-            d += elm.Capacitor(color=color).label(label, loc="bottom")
-        elif "led" in ctype:
-            d += elm.LED(color=color).label(label, loc="bottom")
-        elif "battery" in ctype or "v" in ctype:
-            d += elm.SourceV(color=color).label(label, loc="bottom")
-        else:
-            d += elm.Line(color=color).label(label, loc="bottom")
-        d += elm.Line().right()
+    x_offset = 0  # starting position
 
-    # ✅ FIX: handle both bytes and str cases from schemdraw
+    for i, comp in enumerate(components):
+
+        # Draw the box at a specific location
+        box = d.add(
+            flow.Box(w=4, h=2)
+            .label(f"{comp['type']}\n{comp['value']}", fontsize=12)
+            .at((x_offset, 0))
+        )
+
+        # Add arrow to next block
+        if i < len(components) - 1:
+            d.add(flow.Arrow().right().at(box.E))
+            x_offset += 6  # move next block to the right
+
+    # Convert to SVG
     svg_data = d.get_imagedata("svg")
     if isinstance(svg_data, bytes):
         svg_data = svg_data.decode("utf-8")
 
-    # Add white background style
     svg_data = svg_data.replace("<svg ", '<svg style="background-color:white;" ')
     return svg_data
+
 
 # -------------------------
 # 🚀 SMART FLOW: Clarify → Review → Generate BOM
@@ -258,5 +284,10 @@ Format strictly as JSON array with fields:
 # -------------------------
 # 🌐 LCSC Placeholder
 # -------------------------
-if lcsc_link:
-    st.info(f"LCSC link provided: {lcsc_link}\n(Future: fetch specs via LCSC API)")
+# -------------------------
+# 🌐 LCSC Links Placeholder
+# -------------------------
+if "lcsc_links" in st.session_state:
+    valid_links = [l for l in st.session_state.lcsc_links if l.strip()]
+    if valid_links:
+        st.info(f"{len(valid_links)} LCSC link(s) added.\n(Future: fetch specs via LCSC API)")
